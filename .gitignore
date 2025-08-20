@@ -1,0 +1,8 @@
+venv/
+*.pyc
+#폴더안 모든 파일 무시
+data/raw/*
+!data/raw/.gitkeep
+
+output/*
+!output/.gitkeep
