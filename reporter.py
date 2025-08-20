@@ -5,6 +5,7 @@ import seaborn as sns
 import datetime
 import logging
 import re
+import holidays # 공휴일 라이브러리 임포트
 
 # Matplotlib 한글 폰트 설정 (없을 경우 기본 폰트로 동작)
 try:
@@ -13,20 +14,33 @@ except:
     pass
 plt.rcParams['axes.unicode_minus'] = False
 
-def get_line_count(filepath):
-    """CSV 파일의 데이터 줄 수를 반환합니다 (헤더 제외)."""
+def get_regular_exposure_count(filepath):
+    """
+    CSV 파일에서 'watched_time' > 1 인 라인 수를 계산하여 '정규노출수'를 반환합니다.
+    """
     if not filepath or pd.isna(filepath): return 0
     try:
-        # 파일이 비어있는 경우를 대비하여 low_memory=False 옵션 추가
-        return len(pd.read_csv(filepath, low_memory=False))
+        df = pd.read_csv(filepath, low_memory=False)
+        # 'watched_time' 컬럼이 없으면 0을 반환
+        if 'watched_time' not in df.columns:
+            logging.warning(f"'watched_time' 컬럼 없음: {filepath}")
+            return 0
+        
+        # 'watched_time'을 숫자로 변환 (변환 불가 시 NaN으로 처리)
+        watched_time_numeric = pd.to_numeric(df['watched_time'], errors='coerce')
+        
+        # NaN이 아닌 값 중에서 1보다 큰 라인의 수를 계산
+        count = watched_time_numeric[watched_time_numeric > 1].count()
+        return count
+
     except (FileNotFoundError, pd.errors.EmptyDataError):
         return 0
     except Exception as e:
-        logging.warning(f"파일 라인 수 계산 오류 ({filepath}): {e}")
+        logging.warning(f"정규노출수 계산 오류 ({filepath}): {e}")
         return 0
 
 def generate_report(results, operation_logs_df, config, duration_seconds):
-    """DB 정보와 통합된 기기별 CSV 및 이중축 그래프 리포트를 생성합니다."""
+    """정규노출수 및 공휴일 정보가 포함된 리포트를 생성합니다."""
     if not results:
         logging.warning("분석할 다운로드 결과가 없어 리포트를 생성하지 않습니다.")
         return
@@ -43,12 +57,11 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
     # 2. 결과 데이터와 운영 로그 병합 및 가공
     summary_df = pd.DataFrame(results)
     merged_df = pd.merge(summary_df, operation_logs_df, on=['차량번호', 'date'], how='left')
-    
     merged_df['운영여부'].fillna('판단실패', inplace=True)
     
-    logging.info("다운로드된 파일들의 데이터 라인 수를 계산합니다...")
-    merged_df['line_count'] = merged_df.apply(
-        lambda row: get_line_count(row['filepath']) if row['status'] in ['Success', 'Skipped'] else 0,
+    logging.info("다운로드된 파일들의 정규노출수를 계산합니다...")
+    merged_df['exposure_count'] = merged_df.apply(
+        lambda row: get_regular_exposure_count(row['filepath']) if row['status'] in ['Success', 'Skipped'] else 0,
         axis=1
     )
     
@@ -63,34 +76,48 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
         logging.info(f"-> '판단실패' 목록 저장 완료: {failure_log_path}")
 
     # 4. 피벗 테이블 생성 및 저장
-    # ... (피벗 테이블 로직은 변경 없음, 생략) ...
-    
+    try:
+        status_pivot = merged_df.pivot_table(index='date', columns='mac', values='status_code', fill_value=0)
+        status_pivot.to_csv(report_dir / "download_status.csv", encoding='utf-8-sig')
+        logging.info(f"-> 상태 피벗 테이블 저장 완료: {report_dir / 'download_status.csv'}")
+
+        exposure_pivot = merged_df.pivot_table(index='date', columns='mac', values='exposure_count', fill_value=0)
+        exposure_pivot.to_csv(report_dir / "exposure_count.csv", encoding='utf-8-sig')
+        logging.info(f"-> 정규노출수 피벗 테이블 저장 완료: {report_dir / 'exposure_count.csv'}")
+    except Exception as e:
+        logging.error(f"피벗 테이블 생성 중 오류 발생: {e}")
+
     # 5. 기기별 CSV 리포트 및 그래프 생성
     logging.info(f"각 기기별 CSV 리포트 및 그래프를 생성합니다...")
-    # 차량번호 대신 MAC ID를 기준으로 그룹화하여 고유 기기를 식별
+    kr_holidays = holidays.KR() # 대한민국 공휴일 객체 생성
+    
     unique_macs = merged_df['mac'].unique()
     for mac_id in unique_macs:
         device_df = merged_df[merged_df['mac'] == mac_id].sort_values('date')
         
-        # 차량번호는 기기별로 동일하므로 첫번째 값 사용
+        if device_df.empty:
+            continue
+            
         bus_number = device_df['차량번호'].iloc[0]
-
-        # ✅ 파일명으로 사용하기 위해 차량번호와 MAC ID에서 특수문자 제거
         sanitized_bus_number = re.sub(r'[^a-zA-Z0-9가-힣]', '', bus_number)
         sanitized_mac = re.sub(r'[^a-zA-Z0-9]', '', mac_id)
         
-        # ✅ 기기별 CSV 파일명 변경
-        report_cols = ['date', 'status', 'line_count', '운영여부']
+        # 기기별 CSV 저장
+        report_cols = ['date', 'status', 'exposure_count', '운영여부']
         device_df[report_cols].to_csv(reports_dir / f"{sanitized_bus_number}_{sanitized_mac}.csv", index=False, encoding='utf-8-sig')
 
-        # 기기별 그래프 생성 (라인 수 + 운영 상태)
-        fig, ax1 = plt.subplots(figsize=(14, 7))
-        sns.lineplot(x='date', y='line_count', data=device_df, ax=ax1, marker='o', label='라인 수', color='dodgerblue', errorbar=None)
-        ax1.set_ylabel('라인 수', color='dodgerblue', fontsize=12)
+        # 기기별 그래프 생성
+        fig, ax1 = plt.subplots(figsize=(16, 8))
+
+        # 그래프 1: 정규노출수 (좌측 Y축)
+        sns.lineplot(x='date', y='exposure_count', data=device_df, ax=ax1, marker='o', label='정규노출수', color='dodgerblue', errorbar=None)
+        ax1.set_ylabel('정규노출수', color='dodgerblue', fontsize=12)
         ax1.tick_params(axis='y', labelcolor='dodgerblue')
         ax1.set_xlabel('날짜', fontsize=12)
         ax1.set_ylim(bottom=0)
+        ax1.grid(True, linestyle='--', alpha=0.6)
 
+        # 그래프 2: 운영여부 (우측 Y축)
         ax2 = ax1.twinx()
         sns.lineplot(x='date', y='operation_code', data=device_df, ax=ax2, marker='s', linestyle='--', label='운영여부 (1:운영, 0.5:미운영, 0:실패)', color='red', alpha=0.7, errorbar=None)
         ax2.set_ylabel('운영 여부', color='red', fontsize=12)
@@ -99,13 +126,25 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
         ax2.set_yticks([0, 0.5, 1])
         ax2.set_yticklabels(['판단실패', '미운영', '운영'])
         
-        ax1.set_title(f"일별 데이터 라인 수 및 운영 상태 ({bus_number} / {mac_id})", fontsize=16)
-        ax1.tick_params(axis='x', rotation=45)
+        # 주말 및 공휴일 음영 및 텍스트 추가
+        for i, date_str in enumerate(device_df['date']):
+            date_obj = pd.to_datetime(date_str)
+            weekday = date_obj.weekday()
+            holiday_name = kr_holidays.get(date_obj)
+
+            if holiday_name and weekday != 6: # 공휴일 (일요일 제외)
+                ax1.axvspan(i - 0.5, i + 0.5, color='red', alpha=0.1)
+                ax1.text(i, ax1.get_ylim()[1]*0.95, holiday_name, ha='center', va='top', fontsize=10, color='darkred', weight='bold')
+            elif weekday == 6: # 일요일
+                ax1.axvspan(i - 0.5, i + 0.5, color='red', alpha=0.1)
+            elif weekday == 5: # 토요일
+                ax1.axvspan(i - 0.5, i + 0.5, color='blue', alpha=0.1)
+
+        ax1.set_title(f"일별 정규노출수 및 운영 상태 ({bus_number} / {mac_id})", fontsize=16, pad=20)
+        ax1.tick_params(axis='x', rotation=45, labelsize=10)
         fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
         fig.tight_layout()
-        
-        # ✅ 그래프 파일명 변경
-        plt.savefig(graphs_dir / f"line_count_{sanitized_bus_number}_{sanitized_mac}.png")
+        plt.savefig(graphs_dir / f"exposure_count_{sanitized_bus_number}_{sanitized_mac}.png")
         plt.close(fig)
         
     logging.info(f"-> 총 {len(unique_macs)}개의 기기별 CSV 및 그래프 저장 완료.")
@@ -115,7 +154,7 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
     success_count = (summary_df['status'] == 'Success').sum()
     skipped_count = (summary_df['status'] == 'Skipped').sum()
     failure_count = (summary_df['status'] == 'Failure').sum()
-    total_lines = merged_df['line_count'].sum()
+    total_exposures = merged_df['exposure_count'].sum()
     
     summary_content = f"""
 # 실행 결과 요약 (메타 정보)
@@ -129,7 +168,7 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
 - 실패: {failure_count} 개
 ---
 ## 데이터 통계
-- 총 수집된 데이터 라인 수: {int(total_lines)} 줄
+- 총 수집된 정규노출수: {int(total_exposures)} 건
 """
     summary_path = report_dir / "summary.md"
     with open(summary_path, 'w', encoding='utf-8') as f:
