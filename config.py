@@ -58,7 +58,7 @@ OUTPUT_PATH = 'output'
 REPORT_FOLDER_PREFIX = 'analysis_report'
 
 # nomality_check_devices.csv 파일 이름
-DEVICES_FILE = 'nomality_check_devices.csv'
+DEVICES_FILE = 'normality_check_devices.csv'
 
 # 보고서 파일 이름
 REPORT_FILE = 'report.md'
