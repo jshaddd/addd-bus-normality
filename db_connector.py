@@ -51,12 +51,32 @@ def fetch_operation_logs(config, dates_to_fetch):
 
             # '운영 여부' 판단 로직
             # is_morning/lunch/dinner_operating 중 하나라도 1이면 '운영', 모두 0이면 '미운영'
-            db_df['운영여부'] = db_df.apply(
-                lambda row: '운영' if (row['is_morning_operating'] == 1 or 
-                                     row['is_lunch_operating'] == 1 or 
-                                     row['is_dinner_operating'] == 1) else '미운영',
-                axis=1
-            )
+
+            def check_and_print_row(row):
+                # # --- 여기서 row의 내용이 출력됩니다 ---
+                # print("--- 처리 중인 row ---")
+                # print(row)
+                # print("---------------------\n")
+                
+                # 기존의 조건문 로직
+                if (row['is_morning_operating'] == 1 or 
+                    row['is_lunch_operating'] == 1 or 
+                    row['is_dinner_operating'] == 1):
+                    return '운영'
+                else:
+                    return '미운영'
+                
+
+
+            # apply 함수에 정의한 함수를 적용
+            db_df['운영여부']= db_df.apply(check_and_print_row, axis=1)
+            
+            # db_df['운영여부'] = db_df.apply(
+            #     lambda row: '운영' if (row['is_morning_operating'] == 1 or 
+            #                          row['is_lunch_operating'] == 1 or 
+            #                          row['is_dinner_operating'] == 1) else '미운영',
+            #     axis=1
+            # )
             
             # 컬럼명 변경 (병합을 위해)
             db_df.rename(columns={'bus_number': '차량번호', 'operation_date': 'date'}, inplace=True)

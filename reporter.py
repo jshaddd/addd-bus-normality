@@ -56,6 +56,7 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
 
     # 2. 결과 데이터와 운영 로그 병합 및 가공
     summary_df = pd.DataFrame(results)
+    print('summary_df',summary_df)
     merged_df = pd.merge(summary_df, operation_logs_df, on=['차량번호', 'date'], how='left')
     merged_df['운영여부'].fillna('판단실패', inplace=True)
     
