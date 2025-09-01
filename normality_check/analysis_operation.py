@@ -6,30 +6,28 @@ from normality_check.data_processor import (
     task_check_single_day, 
     task_check_period
 )
-from config import REPORTS_PATH, REFERENCE_PATH, DEVICES_FILE, OUTPUT_PATH, REPORT_FILE, REPORT_FOLDER_PREFIX
+from config import REFERENCE_PATH, DEVICES_FILE, REPORT_FILE, CHECK_DATE,CHECK_PERIOD_DAYS
 
 # --------------------------------------------------
 # 사용자 입력 설정
 # --------------------------------------------------
 # 작업 1을 위한 설정
-TARGET_DATE_TASK1 = '2025-08-15'
-MIN_EXPOSURE_COUNT_TASK1 = 1000
+
+TARGET_DATE_TASK1 = CHECK_DATE
+MIN_EXPOSURE_COUNT_TASK1 = 500
 
 # 작업 2를 위한 설정
-TARGET_DATE_TASK2 = '2025-08-15'
-CHECK_PERIOD_DAYS = 10
+TARGET_DATE_TASK2 = CHECK_DATE
 MAX_FAIL_DAYS = 3
-MIN_EXPOSURE_COUNT_TASK2 = 900
+MIN_EXPOSURE_COUNT_TASK2 = 500
 # --------------------------------------------------
 
-def main():
-    """
-    메인 스크립트 실행 함수.
-    """
+def analyze_yesterday_data_integrity(REPORT_PATH):
+    
     
     # 고유한 보고서 폴더 이름 생성 및 경로 설정
-    report_folder_name = f"{REPORT_FOLDER_PREFIX}_{datetime.now().strftime('%Y-%m-%d_%H%M')}"
-    report_folder_path = os.path.join(OUTPUT_PATH, report_folder_name)
+    report_folder_name = f"{'analyze_data_integrity'}"
+    report_folder_path = os.path.join(REPORT_PATH, report_folder_name)
     os.makedirs(report_folder_path, exist_ok=True)
     report_file_path = os.path.join(report_folder_path, REPORT_FILE)
     
@@ -55,7 +53,10 @@ def main():
         return
 
     device_data = pd.read_csv(devices_file_path)
-    file_existence_df = check_file_existence(device_data, REPORTS_PATH)
+
+    report_full_path = os.path.join(REPORT_PATH, 'reports')
+    file_existence_df = check_file_existence(device_data, report_full_path)
+    
     
     report_content.append("## 1. 파일 존재 여부\n\n")
     report_content.append("| 차량번호 | MAC | 파일이름 | 상태 |\n")
@@ -95,6 +96,9 @@ def main():
     
     for result in filtered_task1_results:
         report_content.append(f"| {result['차량번호']} | {result['MAC']} | {result['결과']} |\n")
+
+
+    
         
     # --------------------------------------------------
     # 3. 작업 2: 저조 기간 확인
@@ -143,11 +147,3 @@ def main():
     with open(report_file_path, 'w', encoding='utf-8') as f:
         f.writelines(report_content)
 
-if __name__ == "__main__":
-    # 데이터 폴더가 없으면 생성 (스크립트 실행 전 준비)
-    if not os.path.exists(REPORTS_PATH):
-        os.makedirs(REPORTS_PATH)
-    if not os.path.exists(os.path.join(REFERENCE_PATH)):
-        os.makedirs(os.path.join(REFERENCE_PATH))
-        
-    main()

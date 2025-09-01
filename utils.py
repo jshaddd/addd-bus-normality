@@ -2,6 +2,49 @@
 import pandas as pd
 import logging
 
+from config import DATE_FILE, CHECK_PERIOD_DAYS,CHECK_DATE
+import datetime
+
+
+def generate_and_write_date_csv(check_date_str: str, period_days: int):
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    """
+    지정된 날짜와 기간을 기반으로 CSV 파일을 생성하고 씁니다.
+
+    Args:
+        check_date_str (str): 날짜를 확인할 기준 날짜 ('YYYY-MM-DD' 형식).
+        period_days (int): CSV에 포함될 날짜의 개수.
+    """
+    # CSV 파일이 저장될 디렉토리가 없으면 생성합니다.
+    DATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # 문자열로 된 기준 날짜를 date 객체로 변환합니다.
+    start_date = datetime.datetime.strptime(check_date_str, '%Y-%m-%d').date()
+
+    # CSV 내용을 저장할 리스트와 헤더를 초기화합니다.
+    csv_rows = ["date"]
+
+    # 기준 날짜부터 CHECK_PERIOD_DAYS만큼의 날짜를 역순으로 생성합니다.
+    # 예: 2025-08-22, 2025-08-21, 2025-08-20
+    for i in range(period_days):
+        current_date = start_date - datetime.timedelta(days=i)
+        csv_rows.append(current_date.strftime('%Y-%m-%d'))
+
+    # 리스트를 줄바꿈 문자로 합쳐 하나의 문자열로 만듭니다.
+    date_csv_content = "\n".join(csv_rows)
+
+    # CSV 파일을 열어 내용을 씁니다.
+    # 'w' 모드는 파일이 존재하면 덮어쓰기 때문에, 별도의 존재 여부 확인이 필요 없습니다.
+    try:
+        with open(DATE_FILE, 'w', encoding='utf-8') as f:
+            f.write(date_csv_content)
+        logging.info(f"날짜 파일 생성 완료: {DATE_FILE}")
+        logging.info(f"생성된 날짜 목록: {csv_rows[1:]}")
+    except Exception as e:
+        logging.error(f"파일 생성 중 오류가 발생했습니다: {e}")
+
+
 def setup_directories_and_samples(config):
     """프로젝트 폴더와 샘플 파일을 준비합니다."""
     logging.info("프로젝트 구조 및 샘플 파일 준비 중...")
@@ -18,13 +61,11 @@ def setup_directories_and_samples(config):
         with open(config.DEVICE_FILE, 'w', encoding='utf-8-sig') as f:
             f.write(device_csv_content)
         logging.info(f"샘플 기기 파일 생성: {config.DEVICE_FILE}")
+    check_date_string = CHECK_DATE.strftime('%Y-%m-%d')
 
-    # 샘플 날짜 파일 생성
-    date_csv_content = "date\n2025-08-20\n2025-08-21"
-    if not config.DATE_FILE.exists():
-        with open(config.DATE_FILE, 'w', encoding='utf-8') as f:
-            f.write(date_csv_content)
-        logging.info(f"샘플 날짜 파일 생성: {config.DATE_FILE}")
+    generate_and_write_date_csv(check_date_string,CHECK_PERIOD_DAYS)
+
+
 
 def prepare_download_targets(config):
     """CSV 파일들을 읽어 다운로드 대상 목록 딕셔너리를 생성하여 반환합니다."""

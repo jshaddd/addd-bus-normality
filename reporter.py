@@ -175,3 +175,5 @@ def generate_report(results, operation_logs_df, config, duration_seconds):
     with open(summary_path, 'w', encoding='utf-8') as f:
         f.write(summary_content)
     logging.info(f"-> 메타 정보 요약 파일 저장 완료: {summary_path}")
+
+    return report_dir

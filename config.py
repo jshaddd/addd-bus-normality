@@ -1,5 +1,6 @@
 # config.py
 from pathlib import Path
+from datetime import datetime,timedelta
 
 # --- 기본 경로 설정 ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -19,12 +20,12 @@ API_ENDPOINT = "https://api.addd.co.kr/csv-file/download"
 # ===============================================================
 # True: API를 통해 데이터를 다운로드합니다.
 # False: 다운로드를 건너뛰고 'data/raw/buslight'에 있는 기존 파일로만 분석/리포트를 실행합니다.
-DOWNLOAD_ENABLED = True
+DOWNLOAD_ENABLED = False
 
 # DOWNLOAD_ENABLED가 True일 때만 아래 설정이 의미가 있습니다.
 # 'SKIP_EXISTING' : 파일이 이미 존재하면 다운로드를 건너뜁니다.
 # 'OVERWRITE_ALL' : 기존 데이터를 모두 지우고 항상 새로 다운로드합니다.
-DOWNLOAD_MODE = 'OVERWRITE_ALL'
+DOWNLOAD_MODE = 'SKIP_EXISTING'
 
 DOWNLOAD_ERROR_MODE = 'continue'
 
@@ -48,6 +49,10 @@ DB_NAME = 'bus_operation_logs'            # 데이터베이스 이름
 # ===============================================================
 # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ 정상성 체크 ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
 # ===============================================================
+
+yesterday = (datetime.now() - timedelta(days=1)).date()
+CHECK_DATE=yesterday
+CHECK_PERIOD_DAYS=20
 # 리포트 파일이 있는 폴더 경로
 REPORTS_PATH = 'output/20250820_164535/reports'
 # 참조 파일이 있는 폴더 경로
@@ -58,7 +63,7 @@ OUTPUT_PATH = 'output'
 REPORT_FOLDER_PREFIX = 'analysis_report'
 
 # nomality_check_devices.csv 파일 이름
-DEVICES_FILE = 'normality_check_devices.csv'
+DEVICES_FILE = 'devices.csv'
 
 # 보고서 파일 이름
 REPORT_FILE = 'report.md'

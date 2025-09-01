@@ -7,6 +7,7 @@ from utils import setup_directories_and_samples, prepare_download_targets, scan_
 from data_loader import download_data_from_api
 from db_connector import fetch_operation_logs
 from reporter import generate_report
+from normality_check.analysis_operation import analyze_yesterday_data_integrity
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,7 +42,9 @@ if __name__ == "__main__":
         if results:
             end_time = time.time()
             duration = end_time - start_time
-            generate_report(results, operation_logs_df, config, duration)
+            report_dir=generate_report(results, operation_logs_df, config, duration)
+
+        analyze_yesterday_data_integrity(report_dir)
         
         logging.info("모든 프로세스가 완료되었습니다.")
 
